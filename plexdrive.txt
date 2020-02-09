@@ -1,0 +1,68 @@
+apt-get install fuse sudo curl gnupg1 screen golang git apt-transport-https -y
+wget https://github.com/dweidenfeld/plexdrive/releases/download/5.0.0/plexdrive-linux-amd64 -O plexdrive
+sudo mv plexdrive /usr/local/bin/
+cd /usr/local/bin/
+sudo chown root:root /usr/local/bin/plexdrive
+sudo chmod 755 /usr/local/bin/plexdrive
+mkdir /mnt/plexdrive
+/usr/local/bin/plexdrive mount --uid=1002 --gid=1002 -o allow_other -v 2 --refresh-interval=1m /mnt/plexdrive
+
+sudo /bin/umount -l /mnt/plexdrive
+
+echo '# /etc/systemd/system/plexdrive.service
+
+[Unit]
+Description=Plexdrive
+AssertPathIsDirectory=/mnt/plexdrive
+After=network-online.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/plexdrive mount -v 2 --refresh-interval=1m --chunk-check-threads=8 --chunk-load-threads=8 --chunk-load-ahead=4 --max-chunks=100 --fuse-options=allow_other,read_only --cache-file=/opt/plexdrive5/cache.bolt /mnt/plexdrive
+ExecStop=/bin/fusermount -u /mnt/plexdrive
+Restart=on-abort
+
+[Install]
+WantedBy=default.target' > /etc/systemd/system/plexdrive.service
+
+sudo systemctl daemon-reload
+sudo systemctl start plexdrive.service
+sudo systemctl enable plexdrive.service
+
+########## install plex #########
+
+echo deb https://downloads.plex.tv/repo/deb public main | tee /etc/apt/sources.list.d/plexmediaserver.list
+curl https://downloads.plex.tv/plex-keys/PlexSign.key | apt-key add -
+apt-get update && apt-get install plexmediaserver -y
+
+
+########## plex detect new files in gdrive #########
+
+go get -u github.com/radovskyb/watcher/...
+mv go/bin/watcher /usr/local/bin/
+
+wget https://gist.githubusercontent.com/mog54/03159ba55f1cf77d84f12cd03a0304d0/raw/01332ec8d4995e1e548d7c4ea85d7fd7d410b46f/plexwatcher.py
+mv plexwatcher.py /var/lib/plexmediaserver/
+
+wget https://gist.githubusercontent.com/mog54/03159ba55f1cf77d84f12cd03a0304d0/raw/01332ec8d4995e1e548d7c4ea85d7fd7d410b46f/plexwatcher.service
+mv plexwatcher.service /lib/systemd/system/
+
+sudo systemctl daemon-reload
+sudo systemctl start plexwatcher.service
+sudo systemctl enable plexwatcher.service
+
+########## install tautulli #########
+
+sudo apt-get install git-core
+sudo apt-get install python python-setuptools tzdata
+cd /opt
+sudo git clone https://github.com/Tautulli/Tautulli.git
+sudo addgroup tautulli && sudo adduser --system --no-create-home tautulli --ingroup tautulli
+sudo chown tautulli:tautulli -R /opt/Tautulli
+cd Tautulli
+wget https://raw.githubusercontent.com/mog54/Tautulli/master/init-scripts/init.systemd
+cp /opt/Tautulli/init-scripts/init.systemd /lib/systemd/system/tautulli.service
+systemctl daemon-reload
+systemctl enable tautulli.service
+systemctl start tautulli.service
+
